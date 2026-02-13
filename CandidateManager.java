@@ -1,123 +1,171 @@
 package Devops_Project;
-
 import java.io.*;
 import java.util.*;
 
 public class CandidateManager {
 
-    private static final String FILE_NAME = "candidates.json";
+    private static String FILE_NAME = "candidates.json";
     private static Scanner scanner = new Scanner(System.in);
 
+    public static void setFileName(String fileName) {
+        FILE_NAME = fileName;
+    }
+
+    // =========================
+    // MAIN METHOD (User Interface)
+    // =========================
     public static void main(String[] args) {
+
         while (true) {
-            System.out.println("\n=== Candidate Management ===");
+            System.out.println("\n===== Candidate Management =====");
             System.out.println("1. Add Candidate");
             System.out.println("2. View Candidates");
             System.out.println("3. Exit");
-            System.out.print("Choose option: ");
+            System.out.print("Enter choice: ");
 
-            int choice = scanner.nextInt();
-            scanner.nextLine(); // consume newline
+            String choice = scanner.nextLine();
 
             switch (choice) {
-                case 1:
-                    addCandidate();
+                case "1":
+                    handleAddCandidate();
                     break;
-                case 2:
-                    viewCandidates();
+                case "2":
+                    handleViewCandidates();
                     break;
-                case 3:
-                    System.out.println("Exiting...");
+                case "3":
+                    System.out.println("Exiting Candidate Module...");
                     return;
                 default:
-                    System.out.println("Invalid choice!");
+                    System.out.println("Invalid option. Please try again.");
             }
         }
     }
 
-    // Add Candidate
-    public static void addCandidate() {
-        System.out.print("Enter Candidate ID: ");
-        String id = scanner.nextLine();
-
-        if (isDuplicate(id)) {
-            System.out.println("❌ Candidate ID already exists!");
-            return;
-        }
-
-        System.out.print("Enter Candidate Name: ");
-        String name = scanner.nextLine();
-
-        System.out.print("Enter Party Name: ");
-        String party = scanner.nextLine();
-
-        System.out.print("Enter Symbol (optional): ");
-        String symbol = scanner.nextLine();
-
-        Candidate candidate = new Candidate(id, name, party, symbol);
-
-        try (FileWriter writer = new FileWriter(FILE_NAME, true)) {
-
-            File file = new File(FILE_NAME);
-            if (file.length() == 0) {
-                writer.write("[\n");
-            } else {
-                writer.write(",\n");
-            }
-
-            writer.write(candidate.toJSON());
-            writer.write("\n]");
-            writer.flush();
-
-            System.out.println("✅ Candidate added successfully!");
-
-        } catch (IOException e) {
-            System.out.println("Error saving candidate.");
-        }
-    }
-
-    // View Candidates
-    public static void viewCandidates() {
+    // =========================
+    // UI Handler for Adding Candidate
+    // =========================
+    private static void handleAddCandidate() {
         try {
-            File file = new File(FILE_NAME);
-            if (!file.exists() || file.length() == 0) {
+            System.out.print("Enter Candidate ID: ");
+            String id = scanner.nextLine().trim();
+
+            System.out.print("Enter Candidate Name: ");
+            String name = scanner.nextLine().trim();
+
+            System.out.print("Enter Party Name: ");
+            String party = scanner.nextLine().trim();
+
+            System.out.print("Enter Symbol (optional): ");
+            String symbol = scanner.nextLine().trim();
+
+            addCandidate(id, name, party, symbol);
+            System.out.println("✅ Candidate added successfully.");
+
+        } catch (IllegalArgumentException e) {
+            System.out.println("❌ Validation Error: " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("❌ Error: " + e.getMessage());
+        }
+    }
+
+    // =========================
+    // UI Handler for Viewing
+    // =========================
+    private static void handleViewCandidates() {
+        try {
+            List<String> candidates = readAllCandidatesRaw();
+
+            if (candidates.isEmpty()) {
                 System.out.println("No candidates found.");
                 return;
             }
 
-            Scanner fileScanner = new Scanner(file);
-            System.out.println("\n📋 Candidate List:");
-            while (fileScanner.hasNextLine()) {
-                String line = fileScanner.nextLine();
-                if (line.contains("name")) {
-                    System.out.println(line);
-                }
+            System.out.println("\n--- Candidate List ---");
+
+            int count = 1;
+            for (String c : candidates) {
+                if (!c.startsWith("{")) c = "{" + c;
+                if (!c.endsWith("}")) c = c + "}";
+
+                System.out.println(count + ". " + c);
+                count++;
             }
-            fileScanner.close();
 
         } catch (IOException e) {
-            System.out.println("Error reading file.");
+            System.out.println("Error reading candidates.");
         }
     }
 
-    // Check Duplicate ID
-    public static boolean isDuplicate(String id) {
-        try {
-            File file = new File(FILE_NAME);
-            if (!file.exists()) return false;
+    // =========================
+    // CORE LOGIC METHODS
+    // =========================
 
-            Scanner fileScanner = new Scanner(file);
-            while (fileScanner.hasNextLine()) {
-                String line = fileScanner.nextLine();
-                if (line.contains("\"id\":\"" + id + "\"")) {
-                    fileScanner.close();
-                    return true;
-                }
+    public static void addCandidate(String id, String name, String party, String symbol)
+            throws Exception {
+
+        if (isDuplicate(id)) {
+            throw new Exception("Candidate ID already exists.");
+        }
+
+        Candidate candidate = new Candidate(id, name, party, symbol);
+        List<String> candidates = readAllCandidatesRaw();
+
+        candidates.add(candidate.toJSON());
+        writeAllCandidates(candidates);
+    }
+
+    public static boolean isDuplicate(String id) throws IOException {
+        List<String> candidates = readAllCandidatesRaw();
+
+        for (String c : candidates) {
+            if (c.contains("\"id\":\"" + id + "\"")) {
+                return true;
             }
-            fileScanner.close();
-        } catch (IOException e) {
-            return false;
         }
         return false;
+    }
+
+    public static List<String> readAllCandidatesRaw() throws IOException {
+        File file = new File(FILE_NAME);
+
+        if (!file.exists() || file.length() == 0) {
+            return new ArrayList<>();
+        }
+
+        BufferedReader reader = new BufferedReader(new FileReader(file));
+        StringBuilder content = new StringBuilder();
+        String line;
+
+        while ((line = reader.readLine()) != null) {
+            content.append(line.trim());
+        }
+        reader.close();
+
+        String json = content.toString();
+        json = json.replace("[", "").replace("]", "");
+
+        if (json.trim().isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        return new ArrayList<>(Arrays.asList(json.split("},\\{")));
+    }
+
+    private static void writeAllCandidates(List<String> candidates) throws IOException {
+        BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_NAME));
+        writer.write("[\n");
+
+        for (int i = 0; i < candidates.size(); i++) {
+            String candidate = candidates.get(i);
+
+            if (!candidate.startsWith("{")) candidate = "{" + candidate;
+            if (!candidate.endsWith("}")) candidate = candidate + "}";
+
+            writer.write(candidate);
+            if (i != candidates.size() - 1) writer.write(",\n");
+        }
+
+        writer.write("\n]");
+        writer.close();
     }
 }
